@@ -1,0 +1,578 @@
+---
+title: "Gene_Signature_Analysis"
+author: "Changsheng Li"
+date: "2024-07-23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data preparation
+
+The functions used to load the dataset are stored in functions.R.
+
+```{r}
+source(file = "functions.R")
+library(ggplot2)
+library(gridExtra)
+library(ggpubr)
+```
+
+No default directory to store raw data or Seurat objects. Change the directories in the following chuck.
+
+```{r}
+saveddata.dir="~/DFS/RawData/403-Master-RawData/BioInf/Changsheng_Li/Saveddata/"
+
+fig.path = "~/DFS/users/lich/Images/"
+```
+
+
+## Set up signatures
+
+```{r}
+M1_Jonas <- c('ACOD1', 'AFDN', 'AKAP13', 'ALAS1', 'ANKRD22', 'APOBEC3A', 'APOL2', 'APOL3', 'BST2', 'CALHM6', 'CCL19', 'CD1B', 'CD274', 'CD38', 'CD40', 'CD86', 'CDC42SE2', 'COG6', 'CRYBG1', 'CSTF3', 'DEFA3', 'EBI3', 'ELOVL5', 'ENSA', 'EPSTI1', 'FAM177A1', 'FAS', 'FBP1', 'FBXO6', 'FDX1', 'FUS', 'GBP1', 'GBP4', 'GBP5', 'GLS', 'GPAT3', 'HLA-A', 'HSD11B1', 'HSP90AB4P', 'IDO1', 'IFI44', 'IFIH1', 'IFIT2', 'IFIT3', 'IFIT5', 'ISG15', 'ISG20', 'KMO', 'LAMP3', 'LGALS3BP', 'LHFPL2', 'LTF', 'LY75', 'MARCKSL1', 'MFF', 'MGST1', 'MRAS', 'MT2A', 'MX1', 'MX2', 'NDRG2', 'NFKB2', 'NMES1', 'NT5C3A', 'NUB1', 'OAS2', 'OAS3', 'OASL', 'OGA', 'P2RX7', 'PLAUR', 'PLD1', 'PML', 'PNPLA6', 'PNPT1', 'PTGES', 'PTGS2', 'RBM17', 'RCN1', 'RHOF', 'RIPK2', 'RSAD2', 'SLAMF1', 'SLAMF7', 'SLC15A3', 'SLC27A3', 'SLC29A3', 'SLC2A3', 'SLC2A6', 'SOAT1', 'SPN', 'STX11', 'TAP1', 'TAP2', 'TAPBP', 'TNFAIP3', 'TRAF1', 'VAMP5', 'WARS1', 'XIRP1')
+
+M2_Jonas <- c('ABI3', 'ACOT11', 'ADAP1', 'ADAP2', 'ALDH1A1', 'APPL2', 'ARHGAP26', 'ARHGAP4', 'ARSA', 'ARSB', 'BABAM2', 'BIN1', 'BLVRB', 'CD14', 'CD163', 'CD163L1', 'CD209', 'CD36', 'CHMP2A', 'CNRIP1', 'COMMD1', 'CRYL1', 'CSF1R', 'CST3', 'CTSC', 'CUL4B', 'CYB5R4', 'DAB2', 'DCD', 'EMB', 'F13A1', 'FAH', 'FCGR2A', 'FCGR3A', 'FCGRT', 'FOLR2', 'FUCA1', 'GALE', 'GAS7', 'GATM', 'GLMP', 'GLUL', 'GNPDA1', 'GPR183', 'GRAMD4', 'HAVCR2', 'HECTD3', 'HEXA', 'HEXB', 'HMOX1', 'ITSN1', 'LACC1', 'LGMN', 'LRP1', 'MANBA', 'ME1', 'MGLL', 'MPEG1', 'MPI', 'MSR1', 'NAIP', 'NAPRT', 'NDUFA4', 'NDUFB3', 'NEU1', 'NIF3L1', 'NLN', 'NPL', 'NUBP1', 'NUDT2', 'P2RY11', 'PARP1', 'PDPK1', 'PITHD1', 'PLA2G15', 'PLXDC2', 'PMVK', 'PREX1', 'PRKCE', 'QPRT', 'RASA1', 'RENBP', 'RNASE6', 'RNASET2', 'SAR1B', 'SDF4', 'SDSL', 'SERINC1', 'SERPINB2', 'SGPL1', 'SLC9A9', 'SLCO2B1', 'STAB1', 'SYPL1', 'TANGO2', 'TMEM176B', 'TRIM47', 'VPS50', 'WDR64', 'WDR81')
+
+
+M1_Murray <- c('CCL5', 'CCL18', 'CCR7', 'CD40', 'CXCL10', 'CXCL11', 'CXCL9', 'GBP1', 'IDO1', 'IL12A', 'IL12B', 'IL1B', 'IL23A', 'IL6', 'CXCL8', 'IRF1', 'IRF5', 'KYNU', 'PTX3', 'TNF')
+M2_Murray <- c('ADORA3', 'ALOX15', 'CCL13', 'CCL17', 'CCL18', 'CCL4', 'CD163', 'CD200R1', 'F13A1', 'FN1', 'GATA3', 'IL17RB', 'IL4R', 'IRF4', 'MARCO', 'MMP1', 'MMP12', 'MRC1', 'SOCS1', 'SOCS3', 'STAB1', 'TG', 'TGFB1', 'TGFBR2', 'TGM2')
+
+
+M1_Azizi <- c('CCL5', 'CCR7', 'CD40', 'FCGR1A', 'FCGR1B', 'FCGR1C', 'CD80', 'CD86', 'CXCL10', 'CXCL11', 'CXCL9', 'CCR10', 'IDO1', 'IL12A', 'IL12B', 'IL1A', 'IL1B', 'IL23A', 'IL6', 'NOS2', 'IRF1', 'IRF5', 'KYNU', 'HLA-DMA', 'HLA-DMB', 'HLA-DRA', 'HLA-DRB3', 'CD74', 'HLA-DRB1', 'TNF')
+
+M2_Azizi <- c('ARG1', 'ARG2','CTSA', 'CCL13', 'CCL17', 'CCL18', 'CCL20', 'CCL22', 'CCL24', 'CCL4', 'CD163', 'CD200R1', 'MRC1', 'FCER2', 'CD274', 'CD276', 'FCGR2A', 'FCGR2B', 'FCGR2C', 'CLEC7A', 'CSF1R', 'CTSC', 'CTSB', 'CTSD', 'EGF', 'FASLG', 'FN1', 'IL10', 'IL1R2', 'IL1RN', 'IL4R', 'IRF4', 'LYVE1', 'MARCO', 'MMP14', 'MMP19', 'MMP9', 'MSR1', 'PDCD1LG2', 'TGFB1', 'TGFB2', 'TGFB3', 'TNFSF12', 'TNFSF8', 'VEGFA', 'VEGFB', 'VEGFC', 'FIGF', 'VTCN1', 'WNT7B')
+
+```
+
+## Load macrophages
+```{r}
+macrophages <- readRDS(file = paste0(saveddata.dir, "Seurat_object_macrophages/macrophages.RDS"))
+```
+
+
+```{r}
+macrophages <- FindClusters(macrophages, resolution = 1)
+DimPlot(macrophages, reduction = "umap", group.by = "seurat_clusters", label = T)
+```
+
+## check gene presence in each data set
+
+Use only features presented in all data sets
+
+```{r}
+All_genes <- c(M1_Jonas, M2_Jonas, M1_Murray,M2_Murray, M1_Azizi, M2_Azizi)
+
+object <- readRDS(file = paste0(saveddata.dir, "Seurat_object_myeloids_integrated/1.1_myeloids_integrated.RDS"))
+Lung_1_genes <- All_genes[All_genes %in% Features(object)]
+
+object <- readRDS(file = paste0(saveddata.dir, "Seurat_object_myeloids_integrated/1.2_myeloids_integrated.RDS"))
+Lung_2_genes <- All_genes[All_genes %in% Features(object)]
+
+object <- readRDS(file = paste0(saveddata.dir, "Seurat_object_myeloids_integrated/2.1_myeloids_integrated.RDS"))
+Brain_1_genes <- All_genes[All_genes %in% Features(object)]
+
+object <- readRDS(file = paste0(saveddata.dir, "Seurat_object_myeloids_integrated/2.2_myeloids_integrated.RDS"))
+Brain_2_genes <- All_genes[All_genes %in% Features(object)]
+
+object <- readRDS(file = paste0(saveddata.dir, "Seurat_object_myeloids_integrated/3.1_myeloids_integrated.RDS"))
+Breast_1_genes <- All_genes[All_genes %in% Features(object)]
+
+object <- readRDS(file = paste0(saveddata.dir, "Seurat_object_myeloids_integrated/3.2_myeloids_integrated.RDS"))
+Breast_2_genes <- All_genes[All_genes %in% Features(object)]
+
+object <- readRDS(file = paste0(saveddata.dir, "Seurat_object_myeloids_integrated/4.1_myeloids_integrated.RDS"))
+Ovary_1_genes <- All_genes[All_genes %in% Features(object)]
+
+object <- readRDS(file = paste0(saveddata.dir, "Seurat_object_myeloids_integrated/4.2_myeloids_integrated.RDS"))
+Ovary_2_genes <- All_genes[All_genes %in% Features(object)]
+
+common_genes <- Reduce(intersect, list(Lung_1_genes,
+                                       Lung_2_genes,
+                                       Brain_1_genes,
+                                       Brain_2_genes,
+                                       Breast_1_genes,
+                                       Breast_2_genes,
+                                       Ovary_1_genes,
+                                       Ovary_2_genes))
+
+```
+
+
+## Scoring by signatures
+```{r fig.width=12, fig.height=6}
+
+features <- M1_Jonas[M1_Jonas %in% common_genes]
+
+macrophages <- AddModuleScore(macrophages, 
+                              features = list(features),
+                              name = "M1_Jonas")
+p1 <- FeaturePlot(macrophages,features = 'M1_Jonas1',keep.scale = "all") + ggtitle("M1_Jonas")
+p1
+
+features <- M2_Jonas[M2_Jonas %in% common_genes]
+macrophages <- AddModuleScore(macrophages,
+                              features = list(features),
+                              name = "M2_Jonas")
+p2 <- FeaturePlot(macrophages,features = 'M2_Jonas1',keep.scale = "all") + ggtitle("M2_Jonas")
+p2
+
+features <- M1_Murray[M1_Murray %in% common_genes]
+
+macrophages <- AddModuleScore(macrophages, 
+                              features = list(features),
+                              name = "M1_Murray")
+p3 <- FeaturePlot(macrophages,features = 'M1_Murray1') + ggtitle("M1_Murray")
+p3
+
+
+features <- M2_Murray[M2_Murray %in% common_genes]
+macrophages <- AddModuleScore(macrophages, 
+                              features = list(features),
+                              name = "M2_Murray")
+p4 <- FeaturePlot(macrophages,features = 'M2_Murray1') + ggtitle("M2_Murray")
+p4
+
+features <- M1_Azizi[M1_Azizi %in% common_genes]
+
+macrophages <- AddModuleScore(macrophages, 
+                              features = list(features),
+                              name = "M1_Azizi")
+p5 <- FeaturePlot(macrophages,features = 'M1_Azizi1') + ggtitle("M1_Azizi")
+p5
+
+features <- M2_Azizi[M2_Azizi %in% common_genes]
+macrophages <- AddModuleScore(macrophages, 
+                              features = list(features),
+                              name = "M2_Azizi")
+p6 <- FeaturePlot(macrophages,features = 'M2_Azizi1') + ggtitle("M2_Azizi")
+
+#ggarrange(plotlist = list(p1,p2,p3,p4,p5,p6))
+
+p <- FeaturePlot(macrophages,features = c('M1_Jonas1','M2_Jonas1','M1_Murray1','M2_Murray1',"M1_Azizi1","M2_Azizi1"), ncol = 3)
+p
+```
+
+## Annotation by scores
+
+```{r}
+threshold = 0
+annotation_Jonas <- ifelse((macrophages@meta.data[["M1_Jonas1"]] <= threshold & macrophages@meta.data[["M2_Jonas1"]] <= threshold),
+                           yes = "NA",
+                           no = ifelse(macrophages@meta.data[["M1_Jonas1"]] > macrophages@meta.data[["M2_Jonas1"]], "M1", "M2"))
+macrophages$annotation_Jonas <- annotation_Jonas
+table(macrophages$annotation_Jonas)
+
+annotation_Murray <- ifelse((macrophages@meta.data[["M1_Murray1"]] <= threshold & macrophages@meta.data[["M2_Murray1"]] <= threshold),
+                           yes = "NA",
+                           no = ifelse(macrophages@meta.data[["M1_Murray1"]] > macrophages@meta.data[["M2_Murray1"]], "M1", "M2"))
+macrophages$annotation_Murray <- annotation_Murray
+table(macrophages$annotation_Murray)
+
+
+annotation_Azizi <- ifelse((macrophages@meta.data[["M1_Azizi1"]] <= threshold & macrophages@meta.data[["M2_Azizi1"]] <= threshold),
+                           yes = "NA",
+                           no = ifelse(macrophages@meta.data[["M1_Azizi1"]] > macrophages@meta.data[["M2_Azizi1"]], "M1", "M2"))
+macrophages$annotation_Azizi <- annotation_Azizi
+table(macrophages$annotation_Azizi)
+
+df <- data.frame(rbind(table(macrophages$annotation_Jonas), table(macrophages$annotation_Murray), table(macrophages$annotation_Azizi)))
+df$Study <- c("Jonas", "Murray", "Azizi")
+df <- melt(df, variable.name = "Type", value.name = "Cells")
+p <- ggplot(df, aes(fill = Type, x = Study, y=Cells, label = Cells))+
+  geom_bar(position="stack",stat="identity")+
+  geom_text(size=3, position = position_stack(vjust=0.5))
+p
+ggsave(paste0("Cell_annotation_counts.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "Macrophages/"), height = 3, width = 3)
+
+saveRDS(macrophages, file = paste0(saveddata.dir, "Seurat_object_macrophages/macrophages_annotated.RDS"))
+
+```
+
+
+## Differential expression analysis (Jonas)
+
+```{r}
+
+macrophages <- Seurat::SetIdent(macrophages, value = macrophages$annotation_Jonas)
+
+DE_markers_Jonas <- FindAllMarkers(object = subset(macrophages, idents = c('M1', 'M2')), test.use = "t", min.pct = 0.1, only.pos = T)
+
+#DE_markers_Murray <- FindAllMarkers(object = subset(macrophages, subset = annotation_Murray %in% c("M1","M2")), test.use = "t", min.pct = 0.1)
+
+#DE_markers_Azizi <- FindAllMarkers(object = subset(macrophages, subset = annotation_Azizi %in% c("M1","M2")), test.use = "t", min.pct = 0.1)
+
+DE_markers_Jonas_selected <- subset(DE_markers_Jonas, DE_markers_Jonas$p_val_adj < 0.05 & DE_markers_Jonas$avg_log2FC > 0.25)
+
+
+genes_DE_Jonas <- DE_markers_Jonas_selected$gene
+
+intersect(genes_DE_Jonas, c(M1_Jonas, M2_Jonas))
+
+gmt <- msigdbr::msigdbr(species = "human", category = "H")
+
+DE_markers_Jonas_selected_M1 <- noquote(subset(DE_markers_Jonas_selected, cluster=='M1')[,7])
+DE_markers_Jonas_selected_M2 <- noquote(subset(DE_markers_Jonas_selected, cluster=='M2')[,7])
+
+# Enrichment all Genes
+M1_enrich_Jonas <- clusterProfiler::enricher(gene = noquote(subset(DE_markers_Jonas_selected, cluster=='M1')$gene),
+                                                universe = rownames(macrophages),
+                                                pAdjustMethod = "BH",
+                                                qvalueCutoff  = 0.05,
+                                                TERM2GENE = gmt[,c("gs_name", "gene_symbol")])
+M1_enrich_Jonas@result[which(M1_enrich_Jonas@result$p.adjust<0.05),]
+p<- dotplot(M1_enrich_Jonas, showCategory=10) + ggtitle("dotplot")
+p
+ggsave(paste0("M1_Jonas_GSOA.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "GSOA/"), height = 4, width = 7)
+
+M2_enrich_Jonas <- clusterProfiler::enricher(gene = noquote(subset(DE_markers_Jonas_selected, cluster=='M2')$gene),
+                                       universe = rownames(macrophages),
+                                       pAdjustMethod = "BH",
+                                       qvalueCutoff  = 0.05,
+                                       TERM2GENE = gmt[,c("gs_name", "gene_symbol")])
+M2_enrich_Jonas@result[which(M2_enrich_Jonas@result$p.adjust<0.05),]
+p<-dotplot(M2_enrich_Jonas, showCategory=10) + ggtitle("dotplot")
+p
+ggsave(paste0("M2_Jonas_GSOA.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "GSOA/"), height = 4, width = 7)
+
+# Enrichment new Genes
+M1_enrich_Jonas_new <- clusterProfiler::enricher(gene = subset(subset(DE_markers_Jonas_selected, cluster=='M1'), !(gene %in% M1_Jonas))$gene,
+                                                universe = rownames(macrophages),
+                                                pAdjustMethod = "BH",
+                                                qvalueCutoff  = 0.05,
+                                                TERM2GENE = gmt[,c("gs_name", "gene_symbol")])
+M1_enrich_Jonas_new@result[which(M1_enrich_Jonas_new@result$p.adjust<0.05),]
+p<-dotplot(M1_enrich_Jonas_new, showCategory=10) + ggtitle("dotplot")
+p
+ggsave(paste0("M1_Jonas_new_GSOA.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "GSOA/"), height = 4, width = 7)
+
+M2_enrich_Jonas_new <- clusterProfiler::enricher(gene = subset(subset(DE_markers_Jonas_selected, cluster=='M2'), !(gene %in% M2_Jonas))$gene,
+                                       universe = rownames(macrophages),
+                                       pAdjustMethod = "BH",
+                                       qvalueCutoff  = 0.05,
+                                       TERM2GENE = gmt[,c("gs_name", "gene_symbol")])
+M2_enrich_Jonas_new@result[which(M2_enrich_Jonas_new@result$p.adjust<0.05),]
+p<-dotplot(M2_enrich_Jonas_new, showCategory=10) + ggtitle("dotplot")
+p
+ggsave(paste0("M2_Jonas_new_GSOA.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "GSOA/"), height = 4, width = 7)
+```
+
+
+### Differential expression analysis (Murray)
+
+```{r}
+
+macrophages <- Seurat::SetIdent(macrophages, value = macrophages$annotation_Murray)
+
+DE_markers_Murray <- FindAllMarkers(object = subset(macrophages, idents = c('M1', 'M2')), test.use = "t", min.pct = 0.1, only.pos = T)
+
+
+DE_markers_Murray_selected <- subset(DE_markers_Murray, DE_markers_Murray$p_val_adj < 0.05 & DE_markers_Murray$avg_log2FC > 0.75)
+
+genes_DE_Murray <- DE_markers_Murray_selected$gene
+
+intersect(genes_DE_Murray, c(M1_Murray, M2_Murray))
+
+gmt <- msigdbr::msigdbr(species = "human", category = "H")
+
+DE_markers_Murray_selected_M1 <- noquote(subset(DE_markers_Murray_selected, cluster=='M1')[,7])
+DE_markers_Murray_selected_M2 <- noquote(subset(DE_markers_Murray_selected, cluster=='M2')[,7])
+
+# Enrichment all Genes
+M1_enrich_Murray <- clusterProfiler::enricher(gene = subset(DE_markers_Murray_selected, cluster=='M1')$gene,
+                                                universe = rownames(macrophages),
+                                                pAdjustMethod = "BH",
+                                                qvalueCutoff  = 0.05,
+                                                TERM2GENE = gmt[,c("gs_name", "gene_symbol")])
+M1_enrich_Murray@result[which(M1_enrich_Murray@result$p.adjust<0.05),]
+p <- dotplot(M1_enrich_Murray, showCategory=10) + ggtitle("dotplot")
+p
+ggsave(paste0("M1_Murray_GSOA.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "GSOA/"), height = 4, width = 7)
+
+M2_enrich_Murray <- clusterProfiler::enricher(gene = subset(DE_markers_Murray_selected, cluster=='M2')$gene,
+                                       universe = rownames(macrophages),
+                                       pAdjustMethod = "BH",
+                                       qvalueCutoff  = 0.05,
+                                       TERM2GENE = gmt[,c("gs_name", "gene_symbol")])
+M2_enrich_Murray@result[which(M2_enrich_Murray@result$p.adjust<0.05),]
+p<-dotplot(M2_enrich_Murray, showCategory=10) + ggtitle("dotplot")
+p
+ggsave(paste0("M2_Murray_GSOA.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "GSOA/"), height = 4, width = 7)
+
+# Enrichment new Genes
+M1_enrich_Murray_new <- clusterProfiler::enricher(gene = subset(subset(DE_markers_Murray_selected, cluster=='M1'), !(gene %in% M1_Murray))$gene,
+                                                universe = rownames(macrophages),
+                                                pAdjustMethod = "BH",
+                                                qvalueCutoff  = 0.05,
+                                                TERM2GENE = gmt[,c("gs_name", "gene_symbol")])
+M1_enrich_Murray_new@result[which(M1_enrich_Murray_new@result$p.adjust<0.05),]
+p <- dotplot(M1_enrich_Murray_new, showCategory=10) + ggtitle("dotplot")
+p
+ggsave(paste0("M1_Murray_new_GSOA.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "GSOA/"), height = 4, width = 7)
+
+M2_enrich_Murray_new <- clusterProfiler::enricher(gene = subset(subset(DE_markers_Murray_selected, cluster=='M2'), !(gene %in% M2_Murray))$gene,
+                                       universe = rownames(macrophages),
+                                       pAdjustMethod = "BH",
+                                       qvalueCutoff  = 0.05,
+                                       TERM2GENE = gmt[,c("gs_name", "gene_symbol")])
+M2_enrich_Murray_new@result[which(M2_enrich_Murray_new@result$p.adjust<0.05),]
+p <- dotplot(M2_enrich_Murray_new, showCategory=10) + ggtitle("dotplot")
+p
+ggsave(paste0("M2_Murray_new_GSOA.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "GSOA/"), height = 4, width = 7)
+```
+
+
+### Differential expression analysis (Azizi)
+
+```{r}
+
+macrophages <- Seurat::SetIdent(macrophages, value = macrophages$annotation_Azizi)
+
+DE_markers_Azizi <- FindAllMarkers(object = subset(macrophages, idents = c('M1', 'M2')), test.use = "t", min.pct = 0.1, only.pos = T)
+
+#DE_markers_Murray <- FindAllMarkers(object = subset(macrophages, subset = annotation_Murray %in% c("M1","M2")), test.use = "t", min.pct = 0.1)
+
+#DE_markers_Azizi <- FindAllMarkers(object = subset(macrophages, subset = annotation_Azizi %in% c("M1","M2")), test.use = "t", min.pct = 0.1)
+
+DE_markers_Azizi_selected <- subset(DE_markers_Azizi, DE_markers_Azizi$p_val_adj < 0.05 & DE_markers_Azizi$avg_log2FC > 0.75)
+
+genes_DE_Azizi <- DE_markers_Azizi_selected$gene
+
+intersect(genes_DE_Azizi, c(M1_Azizi, M2_Azizi))
+
+gmt <- msigdbr::msigdbr(species = "human", category = "H")
+
+DE_markers_Azizi_selected_M1 <- noquote(subset(DE_markers_Azizi_selected, cluster=='M1')[,7])
+DE_markers_Azizi_selected_M2 <- noquote(subset(DE_markers_Azizi_selected, cluster=='M2')[,7])
+
+# Enrichment all Genes
+M1_enrich_Azizi <- clusterProfiler::enricher(gene = subset(DE_markers_Azizi_selected, cluster=='M1')$gene,
+                                                universe = rownames(macrophages),
+                                                pAdjustMethod = "BH",
+                                                qvalueCutoff  = 0.05,
+                                                TERM2GENE = gmt[,c("gs_name", "gene_symbol")])
+M1_enrich_Azizi@result[which(M1_enrich_Azizi@result$p.adjust<0.05),]
+p<-dotplot(M1_enrich_Azizi, showCategory=10) + ggtitle("dotplot")
+p
+ggsave(paste0("M1_Azizi_GSOA.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "GSOA/"), height = 4, width = 7)
+
+M2_enrich_Azizi <- clusterProfiler::enricher(gene = subset(DE_markers_Azizi_selected, cluster=='M2')$gene,
+                                       universe = rownames(macrophages),
+                                       pAdjustMethod = "BH",
+                                       qvalueCutoff  = 0.05,
+                                       TERM2GENE = gmt[,c("gs_name", "gene_symbol")])
+M2_enrich_Azizi@result[which(M2_enrich_Azizi@result$p.adjust<0.05),]
+p<-dotplot(M2_enrich_Azizi, showCategory=10) + ggtitle("dotplot")
+p
+ggsave(paste0("M2_Azizi_GSOA.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "GSOA/"), height = 4, width = 7)
+# Enrichment new Genes
+M1_enrich_Azizi_new <- clusterProfiler::enricher(gene = subset(subset(DE_markers_Azizi_selected, cluster=='M1'), !(gene %in% M1_Azizi))$gene,
+                                                universe = rownames(macrophages),
+                                                pAdjustMethod = "BH",
+                                                qvalueCutoff  = 0.05,
+                                                TERM2GENE = gmt[,c("gs_name", "gene_symbol")])
+M1_enrich_Azizi_new@result[which(M1_enrich_Azizi_new@result$p.adjust<0.05),]
+p <- dotplot(M1_enrich_Azizi_new, showCategory=10) + ggtitle("dotplot")
+p
+ggsave(paste0("M1_Azizi_new_GSOA.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "GSOA/"), height = 4, width = 7)
+
+M2_enrich_Azizi_new <- clusterProfiler::enricher(gene = subset(subset(DE_markers_Azizi_selected, cluster=='M2'), !(gene %in% M2_Azizi))$gene,
+                                       universe = rownames(macrophages),
+                                       pAdjustMethod = "BH",
+                                       qvalueCutoff  = 0.05,
+                                       TERM2GENE = gmt[,c("gs_name", "gene_symbol")])
+M2_enrich_Azizi_new@result[which(M2_enrich_Azizi_new@result$p.adjust<0.05),]
+p<- dotplot(M2_enrich_Azizi_new, showCategory=10) + ggtitle("dotplot")
+p
+ggsave(paste0("M2_Azizi_new_GSOA.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "GSOA/"), height = 4, width = 7)
+```
+
+
+
+### gene signatures based on Proteomics
+
+```{r}
+proteomics <- read_excel(path = "~/DFS/RawData/403-Master-RawData/BioInf/Jonas/DEA/Proteomics.xlsx",col_names = T)
+rownames(proteomics) <- proteomics$`UniProt ID`
+
+proteomics_M1 <- proteomics[, 4:7]
+proteomics_M2a <- proteomics[, 8:11]
+proteomics_M2c <- proteomics[, 12:15]
+
+log2C_M1_Rest <- rowMeans(proteomics_M1) - rowMeans(cbind(proteomics_M2a,proteomics_M2c))
+log2C_M2a_Rest <- rowMeans(proteomics_M2a) - rowMeans(cbind(proteomics_M1,proteomics_M2c))
+log2C_M2c_Rest <- rowMeans(proteomics_M2c) - rowMeans(cbind(proteomics_M2a,proteomics_M1))
+
+log2FC_table <- data.frame(log2C_M1_Rest, log2C_M2a_Rest, log2C_M2c_Rest)
+rownames(log2FC_table) <- rownames(proteomics)
+
+
+g_M1 <- factor(c(rep("M1", 4), rep("Rest", 8)))
+results_M1 <- MKmisc::mod.t.test(as.matrix(proteomics[4:15]), group = g_M1)
+rownames(results_M1) <- rownames(proteomics)
+prot_sig_M1 <- results_M1[results_M1$adj.p.value < 0.05 & results_M1$`difference in means`>3.5,]
+
+g_M2a <- factor(c(rep("Rest", 4),rep("M2a", 4), rep("Rest", 4)))
+results_M2a <- MKmisc::mod.t.test(as.matrix(proteomics[4:15]), group = g_M2a)
+rownames(results_M2a) <- rownames(proteomics)
+prot_sig_M2a <- results_M2a[results_M2a$adj.p.value < 0.05 & results_M2a$`difference in means`>1,]
+
+g_M2c <- factor(c(rep("Rest", 8), rep("M2c", 4)))
+results_M2c <- MKmisc::mod.t.test(as.matrix(proteomics[4:15]), group = g_M2c)
+rownames(results_M2c) <- rownames(proteomics)
+prot_sig_M2c <- results_M2c[results_M2c$adj.p.value < 0.05 & results_M2c$`difference in means`>1,]
+
+write.table(rownames(prot_sig_M1), file = paste0(saveddata.dir, "Proteomics_signature/M1_Rest_sig.csv"), quote = F, row.names = F, col.names = F)
+write.table(rownames(prot_sig_M2a), file = paste0(saveddata.dir, "Proteomics_signature/M2a_Rest_sig.csv"), quote = F, row.names = F, col.names = F)
+write.table(rownames(prot_sig_M2c), file = paste0(saveddata.dir, "Proteomics_signature/M2c_Rest_sig.csv"), quote = F, row.names = F, col.names = F)
+
+
+```
+Now go to Uniprot to map protein ID to Gene name
+
+
+#### score by proteomics signatues
+
+```{r}
+
+### remember to convert protein names to gene names
+sig.M1 <- read.table(file = paste0(saveddata.dir, "Proteomics_signature/Prot2gene_M1_rest_sig.tsv"), header = T, row.names = "From")
+features <- sig.M1$To
+macrophages <- AddModuleScore(macrophages,
+                              features = list(features),
+                              name = "M1_Rest_Score")
+p1 <- FeaturePlot(macrophages,features = 'M1_Rest_Score1',keep.scale = "all") + ggtitle("M1_Rest_Score")
+p1
+
+sig.M2a <- read.table(file = paste0(saveddata.dir, "Proteomics_signature/Prot2gene_M2a_rest_sig.tsv"), header = T, row.names = "From")
+features <- sig.M2a$To
+macrophages <- AddModuleScore(macrophages,
+                              features = list(features),
+                              name = "M2a_Rest_Score")
+p2 <- FeaturePlot(macrophages,features = 'M2a_Rest_Score1',keep.scale = "all") + ggtitle("M2a_Rest_Score")
+p2
+
+sig.M2c <- read.table(file = paste0(saveddata.dir, "Proteomics_signature/Prot2gene_M2c_rest_sig.tsv"), header = T, row.names = "From")
+features <- sig.M2c$To
+macrophages <- AddModuleScore(macrophages,
+                              features = list(features),
+                              name = "M2c_Rest_Score")
+p3 <- FeaturePlot(macrophages,features = 'M2c_Rest_Score1',keep.scale = "all") + ggtitle("M2c_Rest_Score")
+p3
+
+
+```
+
+
+### Annotation by proteomics signature
+
+```{r}
+Prot_scores <- data.frame(M1 = macrophages$M1_Rest_Score1,
+                          M2a = macrophages$M2a_Rest_Score1,
+                          M2c = macrophages$M2c_Rest_Score1)
+row_max <- apply(Prot_scores, 1, max, na.rm=TRUE)
+
+annotation <- colnames(Prot_scores)[max.col(Prot_scores, ties.method='first')]
+
+Prot_scores$annotation <- ifelse(row_max > 0, yes = annotation, no = "NA")
+
+macrophages$annotation_Prot <- Prot_scores$annotation
+
+table(Prot_scores$annotation)
+```
+
+### DE analysis based on proteomics annotation
+
+```{r}
+macrophages <- Seurat::SetIdent(macrophages, value = macrophages$annotation_Prot)
+
+DE_markers_Prot <- FindAllMarkers(object = subset(macrophages, idents = c('M1', 'M2a', "M2c")), test.use = "t", min.pct = 0.1, only.pos = T)
+
+
+DE_markers_Prot_selected <- subset(DE_markers_Prot, DE_markers_Prot$p_val_adj < 0.05 & DE_markers_Prot$avg_log2FC > 0.5)
+
+
+genes_DE_Prot <- DE_markers_Prot_selected$gene
+
+intersect(genes_DE_Prot, c(sig.M1$To, sig.M2a$To, sig.M2c$To))
+
+write.csv(DE_markers_Prot_selected, file = paste0(saveddata.dir, "Proteomics_signature/DE_markers_Prot_selected.csv"), quote = F)
+
+gmt <- msigdbr::msigdbr(species = "human", category = "H")
+
+DE_markers_Prot_selected_M1 <- noquote(subset(DE_markers_Prot_selected, cluster=='M1')[,7])
+DE_markers_Prot_selected_M2a <- noquote(subset(DE_markers_Prot_selected, cluster=='M2a')[,7])
+DE_markers_Prot_selected_M2c <- noquote(subset(DE_markers_Prot_selected, cluster=='M2c')[,7])
+
+# Enrichment all Genes
+M1_enrich_Prot <- clusterProfiler::enricher(gene = subset(DE_markers_Prot_selected, cluster=='M1')$gene,
+                                                universe = rownames(macrophages),
+                                                pAdjustMethod = "BH",
+                                                qvalueCutoff  = 0.05,
+                                                TERM2GENE = gmt[,c("gs_name", "gene_symbol")])
+M1_enrich_Prot@result[which(M1_enrich_Prot@result$p.adjust<0.05),]
+p<-dotplot(M1_enrich_Prot, showCategory=10) + ggtitle("dotplot")
+p
+ggsave(paste0("M1_signature_GSOA.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "GSOA/"), height = 4, width = 7)
+
+M2a_enrich_Prot <- clusterProfiler::enricher(gene = subset(DE_markers_Prot_selected, cluster=='M2a')$gene,
+                                       universe = rownames(macrophages),
+                                       pAdjustMethod = "none",
+                                       qvalueCutoff  = 0.05,
+                                       TERM2GENE = gmt[,c("gs_name", "gene_symbol")])
+M2a_enrich_Prot@result[which(M2a_enrich_Prot@result$p.adjust<0.05),]
+p<-dotplot(M2a_enrich_Prot, showCategory=10) + ggtitle("dotplot")
+p
+ggsave(paste0("M2a_signature_GSOA.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "GSOA/"), height = 4, width = 7)
+
+M2c_enrich_Prot <- clusterProfiler::enricher(gene = subset(DE_markers_Prot_selected, cluster=='M2c')$gene,
+                                       universe = rownames(macrophages),
+                                       pAdjustMethod = "none",
+                                       qvalueCutoff  = 0.05,
+                                       TERM2GENE = gmt[,c("gs_name", "gene_symbol")])
+M2c_enrich_Prot@result[which(M2c_enrich_Prot@result$p.adjust<0.05),]
+p <- dotplot(M2c_enrich_Prot, showCategory=10) + ggtitle("dotplot")
+p
+ggsave(paste0("M2c_signature_GSOA.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "GSOA/"), height = 4, width = 7)
+
+p <- cnetplot(M2c_enrich_Prot, foldChange = subset(DE_markers_Prot_selected, cluster=='M2c')$gene, 
+         circular = T, colorEdge =T, node_label="gene")
+p
+ggsave(paste0("M2c_signature_GSOA_genes.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "GSOA/"), height = 5, width = 8)
+
+# Enrichment new Genes
+# M1_enrich_Prot_new <- clusterProfiler::enricher(gene = subset(subset(DE_markers_Prot_selected, cluster=='M1'), !(gene %in% sig.M1$To))$gene,
+#                                                 universe = rownames(macrophages),
+#                                                 pAdjustMethod = "BH",
+#                                                 qvalueCutoff  = 0.05,
+#                                                 TERM2GENE = gmt[,c("gs_name", "gene_symbol")])
+# M1_enrich_Prot_new@result[which(M1_enrich_Prot_new@result$p.adjust<0.05),]
+# dotplot(M1_enrich_Prot_new, showCategory=10) + ggtitle("dotplot")
+# 
+# M2a_enrich_Prot_new <- clusterProfiler::enricher(gene = subset(subset(DE_markers_Prot_selected, cluster=='M2'), !(gene %in% sig.M2a$To))$gene,
+#                                        universe = rownames(macrophages),
+#                                        pAdjustMethod = "BH",
+#                                        qvalueCutoff  = 0.05,
+#                                        TERM2GENE = gmt[,c("gs_name", "gene_symbol")])
+# M2a_enrich_Prot_new@result[which(M2a_enrich_Prot_new@result$p.adjust<0.05),]
+# dotplot(M2a_enrich_Prot_new, showCategory=10) + ggtitle("dotplot")
+# 
+# M2c_enrich_Prot_new <- clusterProfiler::enricher(gene = subset(subset(DE_markers_Prot_selected, cluster=='M2'), !(gene %in% sig.M2c$To))$gene,
+#                                        universe = rownames(macrophages),
+#                                        pAdjustMethod = "BH",
+#                                        qvalueCutoff  = 0.05,
+#                                        TERM2GENE = gmt[,c("gs_name", "gene_symbol")])
+# M2c_enrich_Prot_new@result[which(M2c_enrich_Prot_new@result$p.adjust<0.05),]
+# dotplot(M2c_enrich_Prot_new, showCategory=10) + ggtitle("dotplot")
+```
+
+### Final object of macrophages
+
+```{r}
+saveRDS(macrophages, file = paste0(saveddata.dir, "Seurat_object_macrophages/macrophages_final.RDS"))
+```
+
+
+

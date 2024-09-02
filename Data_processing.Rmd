@@ -1,0 +1,1053 @@
+---
+title: "Data_processing"
+author: "Changsheng Li"
+date: "2024-04-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Available datasets
+
+Currently 9 datases are reviewed and chosen:
+
+| Study code |  GEO ID   | Location | Related study            |
+|------------|-----------|----------|--------------------------|
+|    1.1     | GSE123902 |   Lung   | Laughney et al. 2020     |
+|    1.2     | GSE131907 |   Lung   | Kim et al. 2020          |
+|    2.1     | GSE163120 |   Brain  | Pombo Antunes et al 2019 |
+|    2.2     | GSE135045 |   Brain  | Xiao et al 2022          |
+|    3.1     | GSE118389 |   Breast | Karaayvaz et al 2021     |
+|    3.2     | GSE161529 |   Breast | Pal et al 2021           |
+|    4.1     | GSE184880 |   Ovary  | Xu et al 2020            |
+|    4.2     | GSE154600 |   Ovary  | Geistlinger et al 2021   |
+
+
+## Data preparation
+
+All datasets would be loaded as they were provided to the database.
+
+The functions used to load the dataset are stored in functions.R.
+
+```{r}
+source(file = "functions.R")
+library(ggplot2)
+```
+
+Use the function `load_seurat(accession, study.code, rawdata.dir, saveddata.dir)` to load dataset individually. 
+
+No default directory to store raw data or Seurat objects. Change the directories in the following chuck.
+
+```{r}
+rawdata.dir="~/DFS/RawData/403-Master-RawData/BioInf/Changsheng_Li/Rawdata/"
+saveddata.dir="~/DFS/RawData/403-Master-RawData/BioInf/Changsheng_Li/Saveddata/"
+
+fig.path.nFeature.ori = "~/DFS/users/lich/Images/nFeature_original/"
+fig.path.nCount.ori = "~/DFS/users/lich/Images/nCount_original/"
+fig.path.MT.ori = "~/DFS/users/lich/Images/MT_original/"
+```
+
+## Data Processing
+
+### 1. Lung
+
+#### 1.1 GSE123902
+
+```{r}
+object <- load_seurat(study.code = 1.1,
+                      rawdata.dir = rawdata.dir,
+                      saveddata.dir = saveddata.dir)
+```
+
+```{r fig.height=10, fig.width=10}
+object[["percent.mt"]] <- PercentageFeatureSet(object, pattern = "^MT-")
+
+p1 = VlnPlot(object, features = "nFeature_RNA",alpha = 0) + 
+  theme(legend.position = 'none') +
+  ggtitle("nFeature - 1.1") +  
+  geom_hline(yintercept = 200, linetype="dashed", color = "red") +
+  geom_hline(yintercept = 5000, linetype="dashed", color = "red") +
+  scale_y_continuous(breaks = sort(c(seq(0,10000, length.out=5), 200, 5000)))+
+  coord_cartesian(ylim = c(0, 10000))
+p1
+ggsave("1.1_nFeature.eps",plot = p1, device = "eps", path = fig.path.nFeature.ori)
+
+p2 = VlnPlot(object, features = "nCount_RNA", alpha = 0) + 
+  theme(legend.position = 'none') +
+  ggtitle("nCount_RNA - 1.1")
+p2
+
+ggsave("1.1_nCount.eps",plot = p2, device = "eps", path = fig.path.nCount.ori)
+
+p3 = VlnPlot(object, features = "percent.mt", alpha = 0) +
+  theme(legend.position = 'none') +
+  ggtitle("MT% - 1.1") +
+  coord_cartesian(ylim = c(0, 50)) +
+  geom_hline(yintercept = 10, linetype="dashed", color = "red") +
+  scale_y_continuous(breaks = sort(c(seq(0,50, length.out=6), 10)))
+p3
+ggsave("1.1_MT.eps",plot = p3, device = "eps", path = fig.path.MT.ori)
+
+```
+
+
+
+```{r fig.width=10}
+
+plot1 <- FeatureScatter(object, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(object, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+
+plot1 + plot2
+```
+
+```{r}
+
+object_subset <- subset(object, subset = nFeature_RNA > 200 & nFeature_RNA < 5000 & percent.mt < 10 & tissue == "Patient primary lung adenocarcinoma")
+VlnPlot(object_subset, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), combine = F)
+```
+
+
+##### Nomalization
+
+```{r fig.width=10}
+object_subset <- NormalizeData(object_subset)
+
+object_subset <- FindVariableFeatures(object_subset, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(object_subset), 10)
+
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(object_subset)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+```
+
+
+##### Scaling
+
+```{r}
+all.genes <- rownames(object_subset)
+object_subset <- ScaleData(object_subset, features = all.genes)
+```
+
+##### DR
+
+PCA
+```{r}
+object_subset <- RunPCA(object_subset, features = VariableFeatures(object = object_subset))
+VizDimLoadings(object_subset, dims = 1:2, reduction = "pca")
+DimPlot(object_subset, reduction = "pca")
+ElbowPlot(object_subset)
+```
+
+UMAP
+
+```{r}
+object_subset <- RunUMAP(object_subset, dims = 1:20)
+DimPlot(object_subset, reduction = "umap", alpha=1)
+saveRDS(object_subset,file = paste0(saveddata.dir, "Seurat_object_UMAP/1.1_UMAP.RDS"))
+```
+
+##### Plot features
+
+tumor related genes
+
+```{r}
+FeaturePlot(object = object_subset, features = c("EPCAM","KRT19","CEA", "SCC","AIF1"))
+```
+
+##### data integration
+
+```{r}
+object_subset <- readRDS(file = paste0(saveddata.dir, "Seurat_object_UMAP/1.1_UMAP.RDS"))
+#object_subset[["RNA"]] <- split(object_subset[["RNA"]], f=object_subset$patient)
+
+object_subset <- SCTransform(object_subset, vst.flavor = "v2")
+object_subset <- RunPCA(object_subset, verbose = FALSE)
+
+object_subset <- IntegrateLayers(object = object_subset, method = CCAIntegration, orig.reduction = "pca", new.reduction = "integrated.cca", verbose = FALSE)
+
+# re-join layers after integration
+object_subset[["RNA"]] <- JoinLayers(object_subset[["RNA"]])
+
+object_subset <- FindNeighbors(object_subset, reduction = "integrated.cca", dims = 1:30)
+object_subset <- FindClusters(object_subset, resolution = 0.1)
+object_subset <- RunUMAP(object_subset, dims = 1:50, reduction = "integrated.cca")
+DimPlot(object_subset, reduction = "umap", group.by = c("geo_accession", "seurat_clusters"))
+saveRDS(object_subset,file = paste0(saveddata.dir, "Seurat_object_integrated_UMAP/1.1_integrated_UMAP.RDS"))
+```
+
+#### 1.2 GSE131907
+
+```{r}
+object <- load_seurat(study.code = 1.2,
+                      rawdata.dir = rawdata.dir,
+                      saveddata.dir = saveddata.dir)
+```
+
+```{r fig.height=10, fig.width=10}
+Idents(object) <- "Sample"
+object[["percent.mt"]] <- PercentageFeatureSet(object, pattern = "^MT-")
+
+p1 = VlnPlot(object, features = "nFeature_RNA",alpha = 0,layer = "counts") + 
+  theme(legend.position = 'none') +
+  ggtitle("nFeature - 1.2") +  
+  geom_hline(yintercept = 200, linetype="dashed", color = "red") +
+  geom_hline(yintercept = 5000, linetype="dashed", color = "red") +
+  scale_y_continuous(breaks = sort(c(seq(0,10000, length.out=5), 200, 5000)))+
+  coord_cartesian(ylim = c(0, 10000))
+p1
+ggsave("1.2_nFeature.eps",plot = p1, device = "eps", path = fig.path.nFeature.ori)
+
+p2 = VlnPlot(object, features = "nCount_RNA", alpha = 0) + 
+  theme(legend.position = 'none') +
+  ggtitle("nCount_RNA - 1.2")
+p2
+ggsave("1.2_nCount.eps",plot = p2, device = "eps", path = fig.path.nCount.ori)
+
+p3 = VlnPlot(object, features = "percent.mt", alpha = 0) +
+  theme(legend.position = 'none') +
+  ggtitle("MT% - 1.2") +
+  coord_cartesian(ylim = c(0, 50)) +
+  geom_hline(yintercept = 10, linetype="dashed", color = "red") +
+  scale_y_continuous(breaks = sort(c(seq(0,50, length.out=6), 10)))
+p3
+ggsave("1.2_MT.eps",plot = p3, device = "eps", path = fig.path.MT.ori)
+
+```
+
+
+
+```{r fig.width=10}
+
+plot1 <- FeatureScatter(object, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(object, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+
+plot1 + plot2
+
+```
+
+```{r}
+object_subset <- subset(object, subset = nFeature_RNA > 200 & nFeature_RNA < 5000 & percent.mt < 10 & Sample_Origin == c("tL/B", "tLung"))
+VlnPlot(object_subset, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), combine = F, alpha = 0)
+```
+
+##### Normalization
+
+```{r fig.width=10}
+object_subset <- split(object_subset, f = object_subset$Sample)
+object_subset <- NormalizeData(object_subset,normalization.method = "LogNormalize" )
+
+object_subset <- FindVariableFeatures(object_subset, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(object_subset), 10)
+
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(object_subset)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+```
+
+
+##### Scaling
+
+```{r}
+all.genes <- rownames(object_subset)
+object_subset <- ScaleData(object_subset, features = all.genes, do.scale = F, do.center = T, scale.max=10)
+```
+
+##### DR
+
+PCA
+```{r}
+object_subset <- RunPCA(object_subset, features = VariableFeatures(object = object_subset))
+VizDimLoadings(object_subset, dims = 1:2, reduction = "pca")
+DimPlot(object_subset, reduction = "pca", dims = 1:2, group.by = "Cell_type")
+ElbowPlot(object_subset)
+```
+
+UMAP
+
+```{r}
+object_subset <- RunUMAP(object_subset, dims = 1:30)
+undet <- WhichCells(object = object_subset,  c(object_subset$Cell_type == c("Epithelial cells")))
+DimPlot(object_subset, reduction = "umap", cells.highlight = c(cells.highlight = undet))
+saveRDS(object_subset,file = paste0(saveddata.dir, "Seurat_object_UMAP/1.2_UMAP.RDS"))
+```
+
+##### Plot features
+
+tumor related genes
+
+```{r}
+FeaturePlot(object = object_subset, features = c("EPCAM","KRT19","CEA", "SCC","AIF1"))
+```
+
+##### data integration
+
+```{r}
+object_subset <- readRDS(file = paste0(saveddata.dir, "Seurat_object_UMAP/1.2_UMAP.RDS"))
+object_subset[["RNA"]] <- split(object_subset[["RNA"]], f=object_subset$Sample)
+
+#object_subset <- SCTransform(object_subset, vst.flavor = "v2")
+#object_subset <- RunPCA(object_subset, verbose = FALSE)
+
+object_subset <- IntegrateLayers(object = object_subset, method = CCAIntegration, orig.reduction = "pca", new.reduction = "integrated.cca", verbose = FALSE)
+
+# re-join layers after integration
+object_subset[["RNA"]] <- JoinLayers(object_subset[["RNA"]])
+
+object_subset <- FindNeighbors(object_subset, reduction = "integrated.cca", dims = 1:30)
+object_subset <- FindClusters(object_subset, resolution = 0.01)
+object_subset <- RunUMAP(object_subset, dims = 1:30, reduction = "integrated.cca")
+DimPlot(object_subset, reduction = "umap", group.by = c("geo_accession", "seurat_clusters"))
+saveRDS(object_subset,file = paste0(saveddata.dir, "Seurat_object_integrated_UMAP/1.2_integrated_UMAP.RDS"))
+```
+
+
+### 2. Brain
+
+#### 2.1 GSE163120 (we only take the subsample GSM4972211[human])
+
+```{r}
+object <- load_seurat(study.code = 2.1,
+                      rawdata.dir = rawdata.dir,
+                      saveddata.dir = saveddata.dir)
+```
+
+```{r fig.height=10, fig.width=10}
+object[["percent.mt"]] <- PercentageFeatureSet(object, pattern = "^MT-")
+
+p1 = VlnPlot(object, features = "nFeature_RNA",alpha = 0) + 
+  theme(legend.position = 'none') +
+  ggtitle("nFeature - 2.1") +  
+  geom_hline(yintercept = 200, linetype="dashed", color = "red") +
+  geom_hline(yintercept = 5000, linetype="dashed", color = "red") +
+  scale_y_continuous(breaks = sort(c(seq(0,10000, length.out=5), 200, 5000)))+
+  coord_cartesian(ylim = c(0, 10000))
+p1
+ggsave("2.1_nFeature.eps",plot = p1, device = "eps", path = fig.path.nFeature.ori)
+
+p2 = VlnPlot(object, features = "nCount_RNA", alpha = 0) + 
+  theme(legend.position = 'none') +
+  ggtitle("nCount_RNA - 2.1")
+p2
+ggsave("2.1_nCount.eps",plot = p2, device = "eps", path = fig.path.nCount.ori)
+
+p3 = VlnPlot(object, features = "percent.mt", alpha = 0) +
+  theme(legend.position = 'none') +
+  ggtitle("MT% - 2.1") +
+  coord_cartesian(ylim = c(0, 50)) +
+  geom_hline(yintercept = 10, linetype="dashed", color = "red") +
+  scale_y_continuous(breaks = sort(c(seq(0,50, length.out=6), 10)))
+p3
+ggsave("2.1_MT.eps",plot = p3, device = "eps", path = fig.path.MT.ori)
+
+```
+
+
+```{r fig.width=10}
+
+plot1 <- FeatureScatter(object, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(object, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+
+plot1 + plot2
+
+```
+```{r}
+object_subset <- subset(object, subset = nFeature_RNA > 200 & nFeature_RNA < 5000 & percent.mt < 10)
+VlnPlot(object_subset, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), combine = F)
+```
+
+##### Normalization
+
+```{r fig.width=10}
+object_subset <- NormalizeData(object_subset)
+
+object_subset <- FindVariableFeatures(object_subset, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(object_subset), 10)
+
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(object_subset)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+```
+
+
+##### Scaling
+
+```{r}
+all.genes <- rownames(object_subset)
+object_subset <- ScaleData(object_subset, features = all.genes)
+```
+
+##### DR
+
+PCA
+```{r}
+object_subset <- RunPCA(object_subset, features = VariableFeatures(object = object_subset))
+VizDimLoadings(object_subset, dims = 1:2, reduction = "pca")
+DimPlot(object_subset, reduction = "pca")
+ElbowPlot(object_subset)
+```
+
+UMAP
+
+```{r}
+object_subset <- RunUMAP(object_subset, dims = 1:20)
+DimPlot(object_subset, reduction = "umap", group.by = "cluster")
+saveRDS(object_subset,file = paste0(saveddata.dir, "Seurat_object_UMAP/2.1_UMAP.RDS"))
+```
+
+##### Plot features
+
+tumor related genes
+
+```{r}
+FeaturePlot(object = object_subset, features = c("EPCAM","KRT19","CEA", "SCC","AIF1"))
+```
+
+##### data integration
+
+```{r}
+object_subset <- readRDS(file = paste0(saveddata.dir, "Seurat_object_UMAP/2.1_UMAP.RDS"))
+object_subset[["RNA"]] <- split(object_subset[["RNA"]], f=object_subset$sample)
+
+object_subset <- SCTransform(object_subset, vst.flavor = "v2")
+object_subset <- RunPCA(object_subset, verbose = FALSE)
+
+object_subset <- IntegrateLayers(object = object_subset, method = CCAIntegration, orig.reduction = "pca", new.reduction = "integrated.cca", verbose = FALSE)
+
+# re-join layers after integration
+object_subset[["RNA"]] <- JoinLayers(object_subset[["RNA"]])
+
+object_subset <- FindNeighbors(object_subset, reduction = "integrated.cca", dims = 1:30)
+object_subset <- FindClusters(object_subset, resolution = 0.2)
+object_subset <- RunUMAP(object_subset, dims = 1:30, reduction = "integrated.cca")
+DimPlot(object_subset, reduction = "umap", group.by = c("geo_accession", "seurat_clusters"))
+saveRDS(object_subset,file = paste0(saveddata.dir, "Seurat_object_integrated_UMAP/2.1_integrated_UMAP.RDS"))
+```
+
+
+#### 2.2 GSE182109
+
+```{r}
+object <- load_seurat(study.code = 2.2,
+                      rawdata.dir = rawdata.dir,
+                      saveddata.dir = saveddata.dir)
+```
+
+```{r fig.height=10, fig.width=10}
+object[["percent.mt"]] <- PercentageFeatureSet(object, pattern = "^MT-")
+
+p1 = VlnPlot(object, features = "nFeature_RNA",alpha = 0) + 
+  theme(legend.position = 'none') +
+  ggtitle("nFeature - 2.2") +  
+  geom_hline(yintercept = 200, linetype="dashed", color = "red") +
+  geom_hline(yintercept = 5000, linetype="dashed", color = "red") +
+  scale_y_continuous(breaks = sort(c(seq(0,10000, length.out=5), 200, 5000)))+
+  coord_cartesian(ylim = c(0, 10000))
+p1
+ggsave("2.2_nFeature.eps",plot = p1, device = "eps", path = fig.path.nFeature.ori)
+
+p2 = VlnPlot(object, features = "nCount_RNA", alpha = 0) + 
+  theme(legend.position = 'none') +
+  ggtitle("nCount_RNA - 2.2")
+p2
+ggsave("2.2_nCount.eps",plot = p2, device = "eps", path = fig.path.nCount.ori)
+
+p3 = VlnPlot(object, features = "percent.mt", alpha = 0) +
+  theme(legend.position = 'none') +
+  ggtitle("MT% - 2.2") +
+  coord_cartesian(ylim = c(0, 50)) +
+  geom_hline(yintercept = 10, linetype="dashed", color = "red") +
+  scale_y_continuous(breaks = sort(c(seq(0,50, length.out=6), 10)))
+p3
+ggsave("2.2_MT.eps",plot = p3, device = "eps", path = fig.path.MT.ori)
+
+```
+
+```{r fig.width=10}
+
+plot1 <- FeatureScatter(object, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(object, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+
+plot1 + plot2
+
+```
+```{r}
+object_subset <- subset(object, subset = nFeature_RNA > 200 & nFeature_RNA < 5000 & percent.mt < 10)
+VlnPlot(object_subset, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), combine = F, alpha = 0)
+```
+
+##### Normalization
+
+```{r fig.width=10}
+object_subset <- NormalizeData(object_subset)
+
+object_subset <- FindVariableFeatures(object_subset, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(object_subset), 10)
+
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(object_subset)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+```
+
+
+##### Scaling
+
+```{r}
+all.genes <- rownames(object_subset)
+object_subset <- ScaleData(object_subset, features = all.genes)
+```
+
+##### DR
+
+PCA
+```{r}
+object_subset <- RunPCA(object_subset, features = VariableFeatures(object = object_subset))
+VizDimLoadings(object_subset, dims = 1:2, reduction = "pca")
+DimPlot(object_subset, reduction = "pca")
+ElbowPlot(object_subset)
+```
+
+UMAP
+
+```{r}
+object_subset <- RunUMAP(object_subset, dims = 1:20)
+DimPlot(object_subset, reduction = "umap")
+saveRDS(object_subset,file = paste0(saveddata.dir, "Seurat_object_UMAP/2.2_UMAP.RDS"))
+```
+
+##### Plot features
+
+tumor related genes
+
+```{r}
+FeaturePlot(object = object_subset, features = c("EPCAM","KRT19","P2RY12", "GRN","AIF1"))
+```
+
+##### data integration (no need)
+
+```{r}
+object_subset <- readRDS(file = paste0(saveddata.dir, "Seurat_object_UMAP/2.2_UMAP.RDS"))
+#object_subset[["RNA"]] <- split(object_subset[["RNA"]], f=object_subset$sample)
+
+object_subset <- FindNeighbors(object_subset, reduction = "pca", dims = 1:50)
+object_subset <- FindClusters(object_subset, resolution = 0.2)
+object_subset <- RunUMAP(object_subset, dims = 1:50, reduction = "pca")
+DimPlot(object_subset, reduction = "umap", group.by = c("geo_accession", "seurat_clusters"))
+saveRDS(object_subset,file = paste0(saveddata.dir, "Seurat_object_integrated_UMAP/2.2_integrated_UMAP.RDS"))
+```
+
+### 3. Breast
+
+#### 3.1 GSE75688
+
+```{r}
+object <- load_seurat(study.code = 3.1,
+                      rawdata.dir = rawdata.dir,
+                      saveddata.dir = saveddata.dir)
+```
+
+```{r fig.height=10, fig.width=10}
+Idents(object) <- "patient"
+object[["percent.mt"]] <- PercentageFeatureSet(object, pattern = "^MT-")
+
+p1 = VlnPlot(object, features = "nFeature_RNA",alpha = 0) + 
+  theme(legend.position = 'none') +
+  ggtitle("nFeature - 3.1") +  
+  geom_hline(yintercept = 200, linetype="dashed", color = "red") +
+  geom_hline(yintercept = 5000, linetype="dashed", color = "red") +
+  scale_y_continuous(breaks = sort(c(seq(0,10000, length.out=5), 200, 5000)))+
+  coord_cartesian(ylim = c(0, 10000))
+p1
+ggsave("3.1_nFeature.eps",plot = p1, device = "eps", path = fig.path.nFeature.ori)
+
+p2 = VlnPlot(object, features = "nCount_RNA", alpha = 0) + 
+  theme(legend.position = 'none') +
+  ggtitle("nCount_RNA - 3.1")
+p2
+ggsave("3.1_nCount.eps",plot = p2, device = "eps", path = fig.path.nCount.ori)
+
+p3 = VlnPlot(object, features = "percent.mt", alpha = 0) +
+  theme(legend.position = 'none') +
+  ggtitle("MT% - 3.1") +
+  coord_cartesian(ylim = c(0, 50)) +
+  geom_hline(yintercept = 10, linetype="dashed", color = "red") +
+  scale_y_continuous(breaks = sort(c(seq(0,50, length.out=6), 10)))
+p3
+ggsave("3.1_MT.eps",plot = p3, device = "eps", path = fig.path.MT.ori)
+
+```
+
+
+```{r fig.width=10}
+
+plot1 <- FeatureScatter(object, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(object, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+
+plot1 + plot2
+
+```
+```{r}
+object_subset <- subset(object, subset = nFeature_RNA > 200 & nFeature_RNA < 5000 & percent.mt < 10)
+VlnPlot(object_subset, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), combine = F)
+```
+
+##### Normalization
+
+```{r fig.width=10}
+object_subset <- NormalizeData(object_subset)
+
+object_subset <- FindVariableFeatures(object_subset, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(object_subset), 10)
+
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(object_subset)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+```
+
+
+##### Scaling
+
+```{r}
+all.genes <- rownames(object_subset)
+object_subset <- ScaleData(object_subset, features = all.genes)
+```
+
+##### DR
+
+PCA
+```{r}
+object_subset <- RunPCA(object_subset, features = VariableFeatures(object = object_subset))
+VizDimLoadings(object_subset, dims = 1:2, reduction = "pca")
+DimPlot(object_subset, reduction = "pca")
+ElbowPlot(object_subset)
+```
+
+UMAP
+
+```{r}
+object_subset <- RunUMAP(object_subset, dims = 1:20)
+DimPlot(object_subset, reduction = "umap")
+saveRDS(object_subset,file = paste0(saveddata.dir, "Seurat_object_UMAP/3.1_UMAP.RDS"))
+```
+
+##### Plot features
+
+tumor related genes
+
+```{r}
+object_subset <- readRDS(file = paste0(saveddata.dir, "Seurat_object_UMAP/3.1_UMAP.RDS"))
+FeaturePlot(object = object_subset, features = c("EPCAM","KRT19","CEA", "SCC","AIF1"))
+```
+
+##### data integration
+
+```{r}
+object_subset[["RNA"]] <- split(object_subset[["RNA"]], f=object_subset$orig.ident)
+
+object_subset <- SCTransform(object_subset, vst.flavor = "v2")
+object_subset <- RunPCA(object_subset, verbose = FALSE)
+
+object_subset <- IntegrateLayers(object = object_subset, method = CCAIntegration, orig.reduction = "pca", new.reduction = "integrated.cca", verbose = FALSE, k.weight = 50)
+
+# re-join layers after integration
+object_subset[["RNA"]] <- JoinLayers(object_subset[["RNA"]])
+
+object_subset <- FindNeighbors(object_subset, reduction = "integrated.cca", dims = 1:30)
+object_subset <- FindClusters(object_subset, resolution = 1)
+object_subset <- RunUMAP(object_subset, dims = 1:30, reduction = "integrated.cca")
+DimPlot(object_subset, reduction = "umap", group.by = "orig.ident")
+
+saveRDS(object_subset,file = paste0(saveddata.dir, "Seurat_object_integrated_UMAP/3.1_integrated_UMAP.RDS"))
+```
+
+
+
+#### 3.2 GSE161529
+
+```{r}
+object <- load_seurat(study.code = 3.2,
+                      rawdata.dir = rawdata.dir,
+                      saveddata.dir = saveddata.dir)
+```
+
+```{r fig.height=10, fig.width=10}
+Idents(object) <- "patient"
+object[["percent.mt"]] <- PercentageFeatureSet(object, pattern = "^MT-")
+
+p1 = VlnPlot(object, features = "nFeature_RNA",alpha = 0) + 
+  theme(legend.position = 'none') +
+  ggtitle("nFeature - 3.2") +  
+  geom_hline(yintercept = 200, linetype="dashed", color = "red") +
+  geom_hline(yintercept = 5000, linetype="dashed", color = "red") +
+  scale_y_continuous(breaks = sort(c(seq(0,10000, length.out=5), 200, 5000)))+
+  coord_cartesian(ylim = c(0, 10000))
+p1
+ggsave("3.2_nFeature.eps",plot = p1, device = "eps", path = fig.path.nFeature.ori)
+
+p2 = VlnPlot(object, features = "nCount_RNA", alpha = 0) + 
+  theme(legend.position = 'none') +
+  ggtitle("nCount_RNA - 3.2")
+p2
+ggsave("3.2_nCount.eps",plot = p2, device = "eps", path = fig.path.nCount.ori)
+
+p3 = VlnPlot(object, features = "percent.mt", alpha = 0) +
+  theme(legend.position = 'none') +
+  ggtitle("MT% - 3.2") +
+  coord_cartesian(ylim = c(0, 50)) +
+  geom_hline(yintercept = 10, linetype="dashed", color = "red") +
+  scale_y_continuous(breaks = sort(c(seq(0,50, length.out=6), 10)))
+p3
+ggsave("3.2_MT.eps",plot = p3, device = "eps", path = fig.path.MT.ori)
+
+```
+
+```{r fig.width=10}
+
+plot1 <- FeatureScatter(object, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(object, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+
+plot1 + plot2
+
+```
+```{r}
+object_subset <- subset(object, subset = nFeature_RNA > 200 & nFeature_RNA < 5000 & percent.mt < 10 & cancer.type != "Normal" & cell.population == "Total")
+VlnPlot(object_subset, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), combine = F, alpha = 0)
+```
+
+##### Normalization
+
+```{r fig.width=10}
+object_subset <- NormalizeData(object_subset)
+
+object_subset <- FindVariableFeatures(object_subset, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(object_subset), 10)
+
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(object_subset)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+```
+
+
+##### Scaling
+
+```{r}
+all.genes <- rownames(object_subset)
+object_subset <- ScaleData(object_subset, features = all.genes)
+```
+
+##### DR
+
+PCA
+```{r}
+object_subset <- RunPCA(object_subset, features = VariableFeatures(object = object_subset))
+VizDimLoadings(object_subset, dims = 1:2, reduction = "pca")
+DimPlot(object_subset, reduction = "pca")
+ElbowPlot(object_subset)
+```
+
+UMAP
+
+```{r}
+object_subset <- RunUMAP(object_subset, dims = 1:20)
+DimPlot(object_subset, reduction = "umap")
+saveRDS(object_subset,file = paste0(saveddata.dir, "Seurat_object_UMAP/3.2_UMAP.RDS"))
+```
+##### Plot features
+
+tumor related genes
+
+```{r}
+FeaturePlot(object = object_subset, features = c("EPCAM","KRT19","CEA", "SCC","AIF1"))
+```
+
+##### data integration
+
+```{r}
+object_subset <- readRDS(file = paste0(saveddata.dir, "Seurat_object_UMAP/3.2_UMAP.RDS"))
+#object_subset[["RNA"]] <- split(object_subset[["RNA"]], f=object_subset$sample)
+
+object_subset <- SCTransform(object_subset, vst.flavor = "v2")
+object_subset <- RunPCA(object_subset, verbose = FALSE)
+
+object_subset <- IntegrateLayers(object = object_subset, method = CCAIntegration, orig.reduction = "pca", new.reduction = "integrated.cca", verbose = FALSE)
+
+# re-join layers after integration
+object_subset[["RNA"]] <- JoinLayers(object_subset[["RNA"]])
+
+object_subset <- FindNeighbors(object_subset, reduction = "integrated.cca", dims = 1:30)
+object_subset <- FindClusters(object_subset, resolution = 0.2)
+object_subset <- RunUMAP(object_subset, dims = 1:30, reduction = "integrated.cca")
+DimPlot(object_subset, reduction = "umap", group.by = c("seurat_clusters"))
+saveRDS(object_subset,file = paste0(saveddata.dir, "Seurat_object_integrated_UMAP/3.2_integrated_UMAP.RDS"))
+```
+
+
+### 4. Ovary
+
+#### 4.1 GSE184880
+
+```{r}
+object <- load_seurat(study.code = 4.1,
+                      rawdata.dir = rawdata.dir,
+                      saveddata.dir = saveddata.dir)
+```
+
+```{r fig.height=10, fig.width=10}
+Idents(object) <- "geo_accession"
+object[["percent.mt"]] <- PercentageFeatureSet(object, pattern = "^MT-")
+
+p1 = VlnPlot(object, features = "nFeature_RNA",alpha = 0) + 
+  theme(legend.position = 'none') +
+  ggtitle("nFeature - 4.1") +  
+  geom_hline(yintercept = 200, linetype="dashed", color = "red") +
+  geom_hline(yintercept = 5000, linetype="dashed", color = "red") +
+  scale_y_continuous(breaks = sort(c(seq(0,10000, length.out=5), 200, 5000)))+
+  coord_cartesian(ylim = c(0, 10000))
+p1
+ggsave("4.1_nFeature.eps",plot = p1, device = "eps", path = fig.path.nFeature.ori)
+
+p2 = VlnPlot(object, features = "nCount_RNA", alpha = 0) + 
+  theme(legend.position = 'none') +
+  ggtitle("nCount_RNA - 4.1")
+p2
+ggsave("4.1_nCount.eps",plot = p2, device = "eps", path = fig.path.nCount.ori)
+
+p3 = VlnPlot(object, features = "percent.mt", alpha = 0) +
+  theme(legend.position = 'none') +
+  ggtitle("MT% - 4.1") +
+  coord_cartesian(ylim = c(0, 50)) +
+  geom_hline(yintercept = 10, linetype="dashed", color = "red") +
+  scale_y_continuous(breaks = sort(c(seq(0,50, length.out=6), 10)))
+p3
+ggsave("4.1_MT.eps",plot = p3, device = "eps", path = fig.path.MT.ori)
+
+```
+
+
+```{r fig.width=10}
+
+plot1 <- FeatureScatter(object, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(object, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+
+plot1 + plot2
+
+```
+```{r}
+object_subset <- subset(object, subset = nFeature_RNA > 200 & nFeature_RNA < 5000 & percent.mt < 10)
+VlnPlot(object_subset, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), combine = F)
+```
+
+##### Normalization
+
+```{r fig.width=10}
+object_subset <- NormalizeData(object_subset)
+
+object_subset <- FindVariableFeatures(object_subset, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(object_subset), 10)
+
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(object_subset)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+```
+
+
+
+##### Scaling
+
+```{r}
+all.genes <- rownames(object_subset)
+object_subset <- ScaleData(object_subset, features = all.genes)
+```
+
+##### DR
+
+PCA
+```{r}
+object_subset <- RunPCA(object_subset, features = VariableFeatures(object = object_subset))
+VizDimLoadings(object_subset, dims = 1:2, reduction = "pca")
+DimPlot(object_subset, reduction = "pca")
+ElbowPlot(object_subset, ndims = 30)
+```
+
+UMAP
+
+```{r}
+object_subset <- RunUMAP(object_subset, dims = 1:30)
+DimPlot(object_subset, reduction = "umap")
+saveRDS(object_subset,file = paste0(saveddata.dir, "Seurat_object_UMAP/4.1_UMAP.RDS"))
+```
+##### Plot features
+
+tumor related genes
+
+```{r}
+FeaturePlot(object = object_subset, features = c("EPCAM","KRT19","CEA", "SCC","AIF1"))
+```
+
+##### data integration
+
+```{r}
+object_subset <- readRDS(file = paste0(saveddata.dir, "Seurat_object_UMAP/4.1_UMAP.RDS"))
+#object_subset[["RNA"]] <- split(object_subset[["RNA"]], f=object_subset$patient)
+
+object_subset <- SCTransform(object_subset, vst.flavor = "v2")
+object_subset <- RunPCA(object_subset, verbose = FALSE)
+
+object_subset <- IntegrateLayers(object = object_subset, method = CCAIntegration, orig.reduction = "pca", new.reduction = "integrated.cca", verbose = FALSE)
+
+# re-join layers after integration
+object_subset[["RNA"]] <- JoinLayers(object_subset[["RNA"]])
+
+object_subset <- FindNeighbors(object_subset, reduction = "integrated.cca", dims = 1:30)
+object_subset <- FindClusters(object_subset, resolution = 0.01)
+object_subset <- RunUMAP(object_subset, dims = 1:30, reduction = "integrated.cca")
+DimPlot(object_subset, reduction = "umap", group.by = c("geo_accession", "seurat_clusters"))
+saveRDS(object_subset,file = paste0(saveddata.dir, "Seurat_object_integrated_UMAP/4.1_integrated_UMAP.RDS"))
+```
+
+
+#### 4.2 GSE154600
+
+```{r}
+object <- load_seurat(study.code = 4.2,
+                      rawdata.dir = rawdata.dir,
+                      saveddata.dir = saveddata.dir)
+```
+
+```{r fig.height=10, fig.width=10}
+Idents(object) <- "geo_accession"
+object[["percent.mt"]] <- PercentageFeatureSet(object, pattern = "^MT-")
+
+p1 = VlnPlot(object, features = "nFeature_RNA",alpha = 0) + 
+  theme(legend.position = 'none') +
+  ggtitle("nFeature - 4.2") +  
+  geom_hline(yintercept = 200, linetype="dashed", color = "red") +
+  geom_hline(yintercept = 5000, linetype="dashed", color = "red") +
+  scale_y_continuous(breaks = sort(c(seq(0,10000, length.out=5), 200, 5000)))+
+  coord_cartesian(ylim = c(0, 10000))
+p1
+ggsave("4.2_nFeature.eps",plot = p1, device = "eps", path = fig.path.nFeature.ori)
+
+p2 = VlnPlot(object, features = "nCount_RNA", alpha = 0) + 
+  theme(legend.position = 'none') +
+  ggtitle("nCount_RNA - 4.2")
+p2
+ggsave("4.2_nCount.eps",plot = p2, device = "eps", path = fig.path.nCount.ori)
+
+p3 = VlnPlot(object, features = "percent.mt", alpha = 0) +
+  theme(legend.position = 'none') +
+  ggtitle("MT% - 4.2") +
+  coord_cartesian(ylim = c(0, 50)) +
+  geom_hline(yintercept = 10, linetype="dashed", color = "red") +
+  scale_y_continuous(breaks = sort(c(seq(0,50, length.out=6), 10)))
+p3
+ggsave("4.2_MT.eps",plot = p3, device = "eps", path = fig.path.MT.ori)
+
+```
+
+
+```{r fig.width=10}
+
+plot1 <- FeatureScatter(object, feature1 = "nCount_RNA", feature2 = "percent.mt")
+plot2 <- FeatureScatter(object, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
+
+plot1 + plot2
+
+```
+
+```{r}
+object_subset <- subset(object, subset = nFeature_RNA > 200 & nFeature_RNA < 5000 & percent.mt < 10)
+VlnPlot(object_subset, features = c("nFeature_RNA", "nCount_RNA", "percent.mt"), combine = F)
+```
+
+##### Normalization
+
+```{r fig.width=10}
+object_subset <- NormalizeData(object_subset)
+
+object_subset <- FindVariableFeatures(object_subset, selection.method = "vst", nfeatures = 2000)
+
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(object_subset), 10)
+
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(object_subset)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+```
+
+
+##### Scaling
+
+```{r}
+all.genes <- rownames(object_subset)
+object_subset <- ScaleData(object_subset, features = all.genes)
+```
+
+##### DR
+
+PCA
+```{r}
+object_subset <- RunPCA(object_subset, features = VariableFeatures(object = object_subset))
+VizDimLoadings(object_subset, dims = 1:2, reduction = "pca")
+DimPlot(object_subset, reduction = "pca")
+ElbowPlot(object_subset)
+```
+
+UMAP
+
+```{r}
+object_subset <- RunUMAP(object_subset, dims = 1:20)
+DimPlot(object_subset, reduction = "umap")
+saveRDS(object_subset,file = paste0(saveddata.dir, "Seurat_object_UMAP/4.2_UMAP.RDS"))
+```
+##### Plot features
+
+tumor related genes
+
+```{r}
+FeaturePlot(object = object_subset, features = c("EPCAM","KRT19","CEA", "SCC","AIF1"))
+```
+
+##### data integration
+
+```{r}
+object_subset <- readRDS(file = paste0(saveddata.dir, "Seurat_object_UMAP/4.2_UMAP.RDS"))
+#object_subset[["RNA"]] <- split(object_subset[["RNA"]], f=object_subset$patient)
+
+object_subset <- SCTransform(object_subset, vst.flavor = "v2")
+object_subset <- RunPCA(object_subset, verbose = FALSE)
+
+object_subset <- IntegrateLayers(object = object_subset, method = CCAIntegration, orig.reduction = "pca", new.reduction = "integrated.cca", verbose = FALSE)
+
+# re-join layers after integration
+object_subset[["RNA"]] <- JoinLayers(object_subset[["RNA"]])
+
+object_subset <- FindNeighbors(object_subset, reduction = "integrated.cca", dims = 1:30)
+object_subset <- FindClusters(object_subset, resolution = 0.1)
+object_subset <- RunUMAP(object_subset, dims = 1:50, reduction = "integrated.cca")
+DimPlot(object_subset, reduction = "umap", group.by = c("geo_accession", "seurat_clusters"))
+saveRDS(object_subset,file = paste0(saveddata.dir, "Seurat_object_integrated_UMAP/4.2_integrated_UMAP.RDS"))
+```

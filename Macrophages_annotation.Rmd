@@ -1,0 +1,286 @@
+---
+title: "Macrophages_annotation"
+author: "Changsheng Li"
+date: "2024-06-16"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data preparation
+
+All datasets would be loaded with UMAP.
+
+The functions used to load the dataset are stored in functions.R.
+
+```{r}
+source(file = "functions.R")
+library(ggplot2)
+library(gridExtra)
+```
+
+No default directory to store raw data or Seurat objects. Change the directories in the following chuck.
+
+```{r}
+saveddata.dir="~/DFS/RawData/403-Master-RawData/BioInf/Changsheng_Li/Saveddata/"
+
+fig.path = "~/DFS/users/lich/Images/"
+```
+
+### Load Myeloid Cells
+
+###### add metadata of study, integrate by studies instead of samples
+
+
+```{r}
+for (filename in list.files(paste0(saveddata.dir, "Seurat_object_myeloids_integrated"))) {
+  ID <- strsplit(filename, split = "_")[[1]][1]
+  accession = accession_code_matching(study.code = ID)$accession
+  if (!exists("myeloids_combined")) {
+    myeloids_combined <- readRDS(file = paste0(saveddata.dir, "Seurat_object_myeloids_integrated/", filename))
+    myeloids_combined[["orig.ident"]] <- accession
+  } else {
+    tmp <- readRDS(file = paste0(saveddata.dir, "Seurat_object_myeloids_integrated/", filename))
+    tmp[["orig.ident"]] <- accession
+    myeloids_combined <- merge(myeloids_combined, tmp, merge.data = TRUE)
+  }
+}
+
+saveRDS(myeloids_combined,file = paste0(saveddata.dir, "Seurat_object_macrophages/myeloids_combined.RDS"))
+rm(tmp)
+```
+
+### DR
+
+Normalization
+```{r}
+#myeloids_combined <- readRDS(file = paste0(saveddata.dir, "Seurat_object_macrophages/myeloids_combined.RDS"))
+myeloids_combined[["RNA"]] <- JoinLayers(myeloids_combined[["RNA"]])
+myeloids_combined[["RNA"]] <- split(myeloids_combined[["RNA"]], f = myeloids_combined$orig.ident)
+
+Idents(myeloids_combined) <- myeloids_combined$orig.ident
+
+myeloids_combined <- NormalizeData(myeloids_combined)
+
+myeloids_combined <- FindVariableFeatures(myeloids_combined, selection.method = "vst", nfeatures = 2000)
+# Identify the 10 most highly variable genes
+top10 <- head(VariableFeatures(myeloids_combined), 10)
+
+# plot variable features with and without labels
+plot1 <- VariableFeaturePlot(myeloids_combined)
+plot2 <- LabelPoints(plot = plot1, points = top10, repel = TRUE)
+plot1 + plot2
+```
+
+
+Scale
+
+```{r}
+all.genes <- rownames(myeloids_combined)
+myeloids_combined <- ScaleData(myeloids_combined, features = all.genes)
+```
+
+PCA
+
+```{r}
+myeloids_combined <- RunPCA(myeloids_combined, features = VariableFeatures(object = myeloids_combined))
+VizDimLoadings(myeloids_combined, dims = 1:2, reduction = "pca")
+DimPlot(myeloids_combined, reduction = "pca", group.by = "orig.ident", alpha = 0.1)
+ElbowPlot(myeloids_combined, ndims = 50)
+```
+
+##### data integration
+
+```{r fig.height=4, fig.width=5}
+options(future.globals.maxSize= 2048*1024^2)
+
+myeloids_combined[["RNA"]] <- JoinLayers(myeloids_combined[["RNA"]])
+myeloids_combined[["RNA"]] <- split(myeloids_combined[["RNA"]], f = myeloids_combined$orig.ident)
+
+Idents(myeloids_combined) <- myeloids_combined$orig.ident
+
+myeloids_combined <- IntegrateLayers(object = myeloids_combined, method = CCAIntegration, orig.reduction = "pca", new.reduction = "integrated.cca", verbose = FALSE, k.weight=50)
+
+# re-join layers after integration
+myeloids_combined[["RNA"]] <- JoinLayers(myeloids_combined[["RNA"]])
+
+myeloids_combined <- FindNeighbors(myeloids_combined, reduction = "integrated.cca", dims = 1:50)
+myeloids_combined <- FindClusters(myeloids_combined, resolution = 0.2)
+myeloids_combined <- RunUMAP(myeloids_combined, dims = 1:50, reduction = "integrated.cca")
+p1 <- DimPlot(myeloids_combined, reduction = "umap", group.by = c("seurat_clusters"), alpha=0.5)+ggtitle("UMAP of Myeloid Cells", subtitle = "resolution = 0.3")
+
+p1
+ggsave("myeloid_cells_UMAP.pdf",plot = p1, device = "pdf", path = paste0(fig.path, "Myeloid_cell/"), height = 4, width = 5)
+
+saveRDS(myeloids_combined,file = paste0(saveddata.dir, "Seurat_object_macrophages/myeloids_UMAP_0.3.RDS"))
+```
+
+
+#### Gene expression (used as a cross refenrece to annotate [Mulder et al])
+
+```{r fig.height=8, fig.width=11}
+
+signature_Mac <- c('APOE', 'APOC1', 'C1QB', 'C1QC', 'RNASE1', 'ACP5', 'GPNMB', 'PLD3', 'CTSB', 'PLTP', 'CD9', 'PRDX1', 'CTSZ', 'DAB2', 'CD63', 'CD81', 'LIPA', 'GLUL', 'SLCO2B1', 'CREG1', 'LGALS3', 'LAMP1')
+signature_prol.Mac <- c('TUBB','MKI67','CDK1')
+signature_cMo <- c('S100A8', 'S100A9', 'S100A12', 'VCAN', 'CSF3R')
+signature_CD16_Mono <- c('CDKN1C', 'LRRC25', 'TCF7L2', 'LYN', 'PILRA')
+signature_Tdblets <- c('CD3D', 'GNLY', 'CD7')
+signature_cDC1 <- c('SNX3', 'CPNE3', 'WDFY4', 'CADM1', 'CDK2AP2')
+signature_DC2_DC3 <- c('FCER1A', 'CD1C', 'CLEC10A')
+signature_mregDC <- c('CCR7', 'CCL22', 'LAMP3', 'EBI3', 'RAB8B', 'CERS6')
+
+
+
+p2 <- DoHeatmap(myeloids_combined, 
+          features =c(signature_Mac,
+                      signature_prol.Mac,
+                      signature_cMo,
+                      signature_CD16_Mono,
+                      signature_Tdblets,
+                      signature_cDC1,
+                      signature_DC2_DC3,
+                      signature_mregDC), 
+          cells = 1:10000, size = 4, angle = 90, draw.lines = T) + NoLegend()
+
+p2
+
+ggsave("Heatmap_cluster_vs_signature.pdf",plot = p2, device = "pdf", path = paste0(fig.path, "Myeloid_cell/"), height = 8, width = 10)
+
+#myeloids_rescaled <- ScaleData(myeloids_combined, features = signature_Mac,do.scale = T, do.center = T)
+
+p3 <- DotPlot(myeloids_combined, cols="RdBu", features = c(signature_Mac, 
+                                                           signature_prol.Mac,
+                                                           signature_cMo,
+                                                           signature_CD16_Mono,
+                                                           signature_Tdblets,
+                                                           signature_cDC1,
+                                                           signature_DC2_DC3,
+                                                           signature_mregDC), ) +  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1))+scale_y_discrete(limits=rev)
+
+p3
+
+ggsave("Dotplot_signature_vs_cluster.pdf",plot = p3, device = "pdf", path = paste0(fig.path, "Myeloid_cell/"), height = 7, width = 11)
+
+FeaturePlot(myeloids_combined, features = signature_Mac)
+
+
+FeaturePlot(object = myeloids_combined, features = c("LAMP3","CCR7", "BIRC3", 
+                                                     "IL1B", "HSPA6", "S100A8",
+                                                     "IL4I1", "APOC1", "GPNMB"),ncol = 3) & NoLegend()
+```
+
+### expression pattern
+
+```{r fig.height= 4, fig.width=5}
+
+signatures <- list(signature_Mac=signature_Mac,
+                   signature_prol.Mac = signature_prol.Mac,
+                    signature_cMo=signature_cMo,
+                    signature_CD16_Mono=signature_CD16_Mono,
+                    signature_Tdblets = signature_Tdblets,
+                    signature_cDC1=signature_cDC1,
+                    signature_DC2_DC3=signature_DC2_DC3,
+                    signature_mregDC=signature_mregDC)
+
+for (signature in signatures) {
+  myeloids_combined <- AddModuleScore(myeloids_combined, 
+                                      features = list(unlist(signature)), name = names(signature))
+}
+
+## Mac
+myeloids_combined <- AddModuleScore(myeloids_combined, 
+                                    features = list(signature_Mac),
+                                    name = "signature_Mac")
+p <- FeaturePlot(myeloids_combined, "signature_Mac1", cols = c("white", "darkred")) + ggtitle("Macrophages")
+p
+ggsave(paste0("myeloid_expression_signature_Mac.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "Myeloid_cell/"), height = 4, width = 5)
+
+## prol.Mac
+myeloids_combined <- AddModuleScore(myeloids_combined, 
+                                    features = list(signature_prol.Mac),
+                                    name = "signature_prol.Mac")
+p <- FeaturePlot(myeloids_combined, "signature_prol.Mac1", cols = c("white", "darkred")) + ggtitle("prol.Mac")
+p
+ggsave(paste0("myeloid_expression_signature_prol.Mac.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "Myeloid_cell/"), height = 4, width = 5)
+
+
+## cMo
+myeloids_combined <- AddModuleScore(myeloids_combined, 
+                                    features = list(signature_cMo),
+                                    name = "signature_cMo")
+p <- FeaturePlot(myeloids_combined, "signature_cMo1", cols = c("white", "darkred")) + ggtitle("cMo")
+p
+ggsave(paste0("myeloid_expression_signature_cMo.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "Myeloid_cell/"), height = 4, width = 5)
+
+## Tdblets
+myeloids_combined <- AddModuleScore(myeloids_combined, 
+                                    features = list(signature_Tdblets),
+                                    name = "signature_Tdblets")
+p <- FeaturePlot(myeloids_combined, "signature_Tdblets1", cols = c("white", "darkred")) + ggtitle("T dblets")
+p
+ggsave(paste0("myeloid_expression_signature_Tdblets.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "Myeloid_cell/"), height = 4, width = 5)
+
+
+
+## CD16_Mono
+myeloids_combined <- AddModuleScore(myeloids_combined, 
+                                    features = list(signature_CD16_Mono),
+                                    name = "signature_CD16_Mono")
+p <- FeaturePlot(myeloids_combined, "signature_CD16_Mono1", cols = c("white", "darkred")) + ggtitle("CD16+ Mono")
+p
+ggsave(paste0("myeloid_expression_signature_MacCD16_Mono.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "Myeloid_cell/"), height = 4, width = 5)
+
+## cDC1
+myeloids_combined <- AddModuleScore(myeloids_combined, 
+                                    features = list(signature_cDC1),
+                                    name = "signature_cDC1")
+p <- FeaturePlot(myeloids_combined, "signature_cDC11", cols = c("white", "darkred")) + ggtitle("cDC1")
+p
+ggsave(paste0("myeloid_expression_signature_cDC1.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "Myeloid_cell/"), height = 4, width = 5)
+
+## DC2_DC3
+myeloids_combined <- AddModuleScore(myeloids_combined, 
+                                    features = list(signature_DC2_DC3),
+                                    name = "signature_DC2_DC3")
+p <- FeaturePlot(myeloids_combined, "signature_DC2_DC31", cols = c("white", "darkred")) + ggtitle("DC2_DC3")
+p
+ggsave(paste0("myeloid_expression_signature_DC2_DC3.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "Myeloid_cell/"), height = 4, width = 5)
+
+## mregDC
+myeloids_combined <- AddModuleScore(myeloids_combined, 
+                                    features = list(signature_mregDC),
+                                    name = "signature_mregDC")
+p <- FeaturePlot(myeloids_combined, "signature_mregDC1", cols = c("white", "darkred")) + ggtitle("mregDC")
+p
+ggsave(paste0("myeloid_expression_signature_mregDC.pdf"), plot = p, device = "pdf", path = paste0(fig.path, "Myeloid_cell/"), height = 4, width = 5)
+
+
+
+```
+
+
+### Macrophages Isolation
+
+```{r fig.height=6, fig.width=12}
+# Mac clusters are 1-4 and 8
+macrophages <- subset(myeloids_combined, 
+                      subset = seurat_clusters %in% c(0:4,8))
+
+macrophages_combined[["RNA"]] <- JoinLayers(macrophages_combined[["RNA"]])
+macrophages_combined[["RNA"]] <- split(macrophages_combined[["RNA"]], f = macrophages_combined$orig.ident)
+
+p1 <- DimPlot(macrophages[,macrophages@meta.data[["orig.ident"]]=="GSM4972211"], reduction = "umap", group.by = "cluster", alpha = 1, split.by = "cluster", ncol = 4)
+p1
+
+p2 <- DimPlot(macrophages, reduction = "umap", group.by = "orig.ident", alpha = 0.5, split.by = "orig.ident", ncol = 4) + NoLegend()
+
+p2
+ggsave(paste0("macrophages_by_study.pdf"), plot = p2, device = "pdf", path = paste0(fig.path, "Myeloid_cell/"), height = 6, width = 12)
+
+table(macrophages@meta.data[["orig.ident"]])
+table(myeloids_combined@meta.data[["cluster"]])
+
+saveRDS(macrophages,file = paste0(saveddata.dir, "Seurat_object_macrophages/macrophages.RDS"))
+```
