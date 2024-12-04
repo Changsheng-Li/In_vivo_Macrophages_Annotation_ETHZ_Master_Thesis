@@ -7,7 +7,7 @@ The analysis process would take the scripts as the following order:
 1. `Data_processing.Rmd`
 2. `Myeloids_selection.Rmd`
 3. `Macrophages_annotation.Rmd`
-4. `Data_processing.Rmd`
+4. `Gene_Signature_Analysis.Rmd`
 
 Remember to change the value of `rawdata.dir`, `saveddata.dir` etc.
 
